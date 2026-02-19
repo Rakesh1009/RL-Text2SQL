@@ -1,4 +1,4 @@
-mode: debug   # debug | train
+mode: train   # debug | train
 
 model:
   name: Qwen/Qwen2-1.5B
@@ -11,7 +11,7 @@ model:
     - v_proj
 
 training:
-  lr: 2e-5
+  lr: 0.00002
   epochs: 1
   max_new_tokens: 32
   subset_size: 5

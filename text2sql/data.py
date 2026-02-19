@@ -17,18 +17,22 @@ Generate the correct SQL query.
     return prompt
 
 
-def load_spider_split(split="train", limit=None):
-    dataset = load_dataset("spider", split=split)
+def load_spider_splits(train_size=400, val_size=50, seed=42):
 
-    if limit is not None:
-        dataset = dataset.select(range(limit))
+    dataset = load_dataset("spider", split="train")
+    dataset = dataset.shuffle(seed=seed)
 
-    data = []
-    for ex in dataset:
-        data.append({
-            "prompt": format_prompt(ex),
-            "gold_sql": ex["query"],
-            "db_id": ex["db_id"]
-        })
+    train_dataset = dataset.select(range(train_size))
+    val_dataset = dataset.select(range(train_size, train_size + val_size))
 
-    return data
+    def convert(ds):
+        data = []
+        for ex in ds:
+            data.append({
+                "prompt": format_prompt(ex),
+                "gold_sql": ex["query"],
+                "db_id": ex["db_id"]
+            })
+        return data
+
+    return convert(train_dataset), convert(val_dataset)
