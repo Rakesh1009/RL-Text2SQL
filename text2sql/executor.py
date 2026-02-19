@@ -2,7 +2,7 @@ import sqlite3
 import time
 import os
 
-DB_ROOT = "/content/drive/MyDrive/RL_Text2SQL_storage/spider/database"
+DB_ROOT = "/content/drive/MyDrive/RL_Text2SQL_storage/spider_db/database"
 
 
 def execute_sql(sql, db_id):
@@ -28,11 +28,20 @@ def execute_sql(sql, db_id):
         return {"success": False, "error": str(e), "result": None, "time": 0}
 
 
-def execution_match(pred_sql, gold_sql, db_id):
+def execution_report(pred_sql, gold_sql, db_id):
     pred = execute_sql(pred_sql, db_id)
     gold = execute_sql(gold_sql, db_id)
 
-    if not pred["success"] or not gold["success"]:
-        return False, pred, gold
+    report = {
+        "format_ok": True,      # handled separately in reward
+        "pred_executable": pred["success"],
+        "gold_executable": gold["success"],
+        "correct_result": False,
+        "pred_error": pred["error"],
+        "execution_time": pred["time"]
+    }
 
-    return pred["result"] == gold["result"], pred, gold
+    if pred["success"] and gold["success"]:
+        report["correct_result"] = pred["result"] == gold["result"]
+
+    return report

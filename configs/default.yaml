@@ -15,3 +15,9 @@ training:
   epochs: 1
   max_new_tokens: 32
   subset_size: 5
+
+rl:
+  algorithm: grpo     # reinforce | grpo
+  group_size: 2
+  temperature: 0.8
+  top_p: 0.9

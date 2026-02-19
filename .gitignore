@@ -3,4 +3,4 @@
 *.pyc
 
 _pycache_/
-text2sql/__pycache__/__init__.cpython-312.pyc
+text2sql/__pycache__/*

@@ -4,6 +4,8 @@ from text2sql.reward import compute_reward
 from tqdm import tqdm
 import random
 import numpy as np
+from text2sql.policy import reinforce_step, grpo_step
+from text2sql.executor import execution_report
 
 
 def set_seed(seed=42):
@@ -11,7 +13,6 @@ def set_seed(seed=42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-
 
 def evaluate(model, tokenizer, dataset, max_new_tokens):
 
@@ -33,7 +34,7 @@ def evaluate(model, tokenizer, dataset, max_new_tokens):
             generated = model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
-                do_sample=False  # deterministic eval
+                do_sample=False
             )
 
             gen_tokens = generated[:, input_len:]
@@ -42,9 +43,9 @@ def evaluate(model, tokenizer, dataset, max_new_tokens):
                 skip_special_tokens=True
             ).strip()
 
-            reward = compute_reward(pred_text, gold_sql, db_id)
+            report = execution_report(pred_text, gold_sql, db_id)
 
-            if reward == 1:
+            if report["correct_result"]:
                 correct += 1
 
     return correct / len(dataset)
@@ -56,7 +57,6 @@ def train(model, tokenizer, train_data, val_data, config):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    model.train()
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -65,6 +65,12 @@ def train(model, tokenizer, train_data, val_data, config):
 
     epochs = config["training"]["epochs"]
     max_new_tokens = config["training"]["max_new_tokens"]
+
+    rl_cfg = config.get("rl", {})
+    algorithm = rl_cfg.get("algorithm", "reinforce")
+    group_size = rl_cfg.get("group_size", 2)
+    temperature = rl_cfg.get("temperature", 1.0)
+    top_p = rl_cfg.get("top_p", 0.9)
 
     for epoch in range(epochs):
 
@@ -81,56 +87,38 @@ def train(model, tokenizer, train_data, val_data, config):
             db_id = example["db_id"]
 
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
-            input_len = inputs["input_ids"].shape[1]
 
-            # Sampling generation
-            with torch.no_grad():
-                generated = model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=True,
-                    temperature=1.0,
-                    top_p=0.9
+            if algorithm == "reinforce":
+                loss, reward = reinforce_step(
+                    model,
+                    tokenizer,
+                    inputs,
+                    gold_sql,
+                    db_id,
+                    max_new_tokens,
+                    temperature,
+                    top_p,
+                    debug=(step < 2)
                 )
 
-            gen_tokens = generated[:, input_len:]
-            pred_text = tokenizer.decode(
-                gen_tokens[0],
-                skip_special_tokens=True
-            ).strip()
+            elif algorithm == "grpo":
+                loss, reward = grpo_step(
+                    model,
+                    tokenizer,
+                    inputs,
+                    gold_sql,
+                    db_id,
+                    max_new_tokens,
+                    group_size,
+                    temperature,
+                    top_p,
+                    debug=(step < 2)
+                )
 
-            reward = compute_reward(pred_text, gold_sql, db_id)
+            else:
+                raise ValueError("Unknown RL algorithm")
+
             total_reward += reward
-
-            # Debug print first 2 samples
-            if step < 2:
-                print("\n--- Debug Sample ---")
-                print("Prompt:", prompt)
-                print("Predicted SQL:", pred_text)
-                print("Gold SQL:", gold_sql)
-                print("Reward:", reward)
-
-            # Compute logprob
-            outputs = model(
-                input_ids=generated,
-                labels=generated
-            )
-
-            logits = outputs.logits
-
-            shift_logits = logits[:, :-1, :]
-            shift_labels = generated[:, 1:]
-
-            log_probs = F.log_softmax(shift_logits, dim=-1)
-            selected_log_probs = log_probs.gather(
-                2,
-                shift_labels.unsqueeze(-1)
-            ).squeeze(-1)
-
-            gen_log_probs = selected_log_probs[:, input_len-1:]
-            sequence_logprob = gen_log_probs.sum()
-
-            loss = -reward * sequence_logprob
             total_loss += loss.item()
 
             optimizer.zero_grad()
@@ -143,7 +131,6 @@ def train(model, tokenizer, train_data, val_data, config):
         print(f"\nTrain Execution Accuracy: {train_accuracy}")
         print(f"Average Loss: {avg_loss}")
 
-        # Validation
         val_accuracy = evaluate(
             model,
             tokenizer,
@@ -152,3 +139,4 @@ def train(model, tokenizer, train_data, val_data, config):
         )
 
         print(f"Validation Execution Accuracy: {val_accuracy}")
+
