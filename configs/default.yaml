@@ -1,3 +1,5 @@
+mode: debug   # debug | train
+
 model:
   name: Qwen/Qwen2-1.5B
   load_in_4bit: true
@@ -10,4 +12,6 @@ model:
 
 training:
   lr: 2e-5
-  epochs: 3
+  epochs: 1
+  max_new_tokens: 32
+  subset_size: 5
