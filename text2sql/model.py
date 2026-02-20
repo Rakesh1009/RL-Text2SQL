@@ -2,15 +2,10 @@ import os
 import torch
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, PeftModel
 
-# Persistent Google Drive cache root
-DRIVE_CACHE_ROOT = "/content/drive/MyDrive/RL_Text2SQL_storage/hf_cache"
-
-
-def load_config(path="configs/default.yaml"):
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+# Persistent cache root (configurable via environment variable)
+DRIVE_CACHE_ROOT = os.getenv("HF_CACHE_DIR", "./hf_cache")
 
 
 def build_cache_dir(model_name: str, use_4bit: bool):
@@ -28,7 +23,7 @@ def build_cache_dir(model_name: str, use_4bit: bool):
         suffix = "fp16"
 
     model_cache_dir = os.path.join(
-        DRIVE_CACHE_ROOT,
+        os.getenv("HF_CACHE_DIR", "./hf_cache"),
         f"{safe_name}_{suffix}"
     )
 
@@ -37,16 +32,18 @@ def build_cache_dir(model_name: str, use_4bit: bool):
     return model_cache_dir
 
 
-def load_model(config_path="configs/default.yaml"):
-
-    config = load_config(config_path)
+def load_model(config):
     model_cfg = config["model"]
 
     model_name = model_cfg["name"]
     use_4bit = model_cfg.get("load_in_4bit", True)
+    
+    rl_cfg = config.get("rl", {})
+    use_kl = rl_cfg.get("use_kl", False)
 
     print(f"\nLoading model: {model_name}")
     print(f"4-bit quantization enabled: {use_4bit}")
+    print(f"KL Regularization enabled: {use_kl}")
 
     # --------------------------------------------------
     # Build dedicated cache dir per quantization mode
@@ -91,18 +88,42 @@ def load_model(config_path="configs/default.yaml"):
     )
 
     # --------------------------------------------------
-    # Apply LoRA
+    # Load frozen reference model
     # --------------------------------------------------
-    lora_config = LoraConfig(
-        r=model_cfg["lora_r"],
-        lora_alpha=model_cfg["lora_alpha"],
-        target_modules=model_cfg["target_modules"],
-        lora_dropout=model_cfg["lora_dropout"],
-        bias="none",
-        task_type="CAUSAL_LM"
-    )
+    if use_kl:
+        ref_model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            quantization_config=quant_config,
+            device_map="auto",
+            dtype=torch.float16,
+            cache_dir=cache_dir
+        )
+        ref_model.eval()
+        for param in ref_model.parameters():
+            param.requires_grad = False
+    else:
+        ref_model = None
 
-    model = get_peft_model(model, lora_config)
+    # --------------------------------------------------
+    # Apply LoRA or Resume Checkpoint
+    # --------------------------------------------------
+    training_cfg = config.get("training", {})
+    resume_path = training_cfg.get("resume", False)
+
+    if isinstance(resume_path, str) and os.path.exists(resume_path):
+        print(f"Resuming LoRA adapter from checkpoint: {resume_path}")
+        model = PeftModel.from_pretrained(model, resume_path, is_trainable=True)
+    else:
+        lora_config = LoraConfig(
+            r=model_cfg["lora_r"],
+            lora_alpha=model_cfg["lora_alpha"],
+            target_modules=model_cfg["target_modules"],
+            lora_dropout=model_cfg["lora_dropout"],
+            bias="none",
+            task_type="CAUSAL_LM"
+        )
+        model = get_peft_model(model, lora_config)
+
     model.print_trainable_parameters()
 
-    return model, tokenizer
+    return model, ref_model, tokenizer

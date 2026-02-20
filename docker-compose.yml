@@ -1,0 +1,24 @@
+services:
+  train:
+    build: .
+    image: rl-text2sql:latest
+    container_name: rl-text2sql-train
+    tty: true
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HF_CACHE_DIR=/app/hf_cache
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      # If using Hugging Face models that require authentication, 
+      # you can pass the token using: HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      # Mount current directory so that code changes reflect without rebuilding
+      - .:/app
+    # Request GPU allocation
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: python run_train.py

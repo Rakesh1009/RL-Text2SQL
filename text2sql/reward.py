@@ -32,62 +32,75 @@ def check_format(pred_sql):
     return True
 
 
-def compute_reward(pred_sql, gold_sql, db_id, config=None):
-    """
-    Layered reward:
-    Format -> Execution -> Result -> Length
-    """
+def compute_reward(pred_sql, gold_sql, db_id, config=None, return_details=False):
 
-    # Default weights
-    weights = {
-        "format": 1.0,
-        "execution": 2.0,
-        "result": 3.0,
-        "length": 0.5
-    }
+    # -----------------------
+    # 1. Format Check
+    # -----------------------
+    if not check_format(pred_sql):
+        if return_details:
+             return -1.0, {"pred_executable": False, "gold_executable": False, "pred_result": [], "gold_result": [], "error": "Format Check Failed"}
+        return -1.0
 
-    if config and "reward_weights" in config:
-        weights.update(config["reward_weights"])
+    report = execution_report(pred_sql, gold_sql, db_id)
 
     total_reward = 0.0
 
-    # ------------------------
-    # 1. Format Reward
-    # ------------------------
-    format_ok = check_format(pred_sql)
-
-    if format_ok:
-        total_reward += weights["format"]
-    else:
-        total_reward -= weights["format"]
-        return total_reward  # stop early if format bad
-
-    # ------------------------
+    # -----------------------
     # 2. Execution Reward
-    # ------------------------
-    report = execution_report(pred_sql, gold_sql, db_id)
+    # -----------------------
+    if not report["pred_executable"]:
+        if return_details:
+            return -0.5, report
+        return -0.5
 
-    if report["pred_executable"]:
-        total_reward += weights["execution"]
+    total_reward += 1.0  # execution success
+
+    # -----------------------
+    # 3. Column + Row Scoring
+    # -----------------------
+    pred_rows = report.get("pred_result", []) or []
+    gold_rows = report.get("gold_result", []) or []
+
+    # If gold result empty → avoid division by zero
+    if not gold_rows:
+        if return_details:
+            return float(total_reward), report
+        return float(total_reward)
+
+    # ---- Column score ----
+    if len(pred_rows) > 0:
+        pred_col_count = len(pred_rows[0])
+        gold_col_count = len(gold_rows[0])
+        col_score = min(pred_col_count, gold_col_count) / max(pred_col_count, gold_col_count)
     else:
-        total_reward -= weights["execution"]
-        return total_reward  # stop if not executable
+        col_score = 0.0
 
-    # ------------------------
-    # 3. Result Reward
-    # ------------------------
-    if report["correct_result"]:
-        total_reward += weights["result"]
+    total_reward += 2.0 * col_score
+
+    # ---- Row overlap score (unordered) ----
+    pred_set = set(tuple(r) for r in pred_rows)
+    gold_set = set(tuple(r) for r in gold_rows)
+
+    if len(gold_set) > 0:
+        row_overlap = len(pred_set & gold_set) / len(gold_set)
     else:
-        total_reward -= weights["result"]
+        row_overlap = 0.0
 
-    # ------------------------
-    # 4. Length Reward (optional bonus)
-    # Only if result correct
-    # ------------------------
-    if report["correct_result"]:
-        sql_length = len(pred_sql.split())
-        if 5 <= sql_length <= 100:
-            total_reward += weights["length"]
+    total_reward += 2.0 * row_overlap
 
-    return total_reward
+    # -----------------------
+    # 4. Exact unordered match bonus
+    # -----------------------
+    if pred_set == gold_set and len(pred_set) > 0:
+        total_reward += 0.5
+
+        # -----------------------
+        # 5. Order bonus
+        # -----------------------
+        if pred_rows == gold_rows:
+            total_reward += 0.5
+
+    if return_details:
+        return float(total_reward), report
+    return float(total_reward)

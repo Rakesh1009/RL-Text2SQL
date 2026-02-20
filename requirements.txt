@@ -6,3 +6,4 @@ accelerate
 bitsandbytes
 tqdm
 pyyaml
+matplotlib

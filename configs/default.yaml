@@ -1,5 +1,15 @@
 mode: train   # debug | train
 
+paths:
+  spider_db: "./data/spider_db"
+  checkpoints: "./checkpoints"
+
+data:
+  train_size: 50
+  val_size: 10
+  test_size: 10
+  subset_size: 10
+
 model:
   name: Qwen/Qwen2.5-3B-Instruct
   load_in_4bit: true
@@ -11,13 +21,16 @@ model:
     - v_proj
 
 training:
-  lr: 0.00002
+  resume: false
   epochs: 20
-  max_new_tokens: 64
-  subset_size: 5
+  lr: 5e-5
+  max_new_tokens: 128
+  subset_size: 10
 
 rl:
-  algorithm: grpo     # reinforce | grpo
-  group_size: 4
+  algorithm: "grpo"
+  use_kl: false
+  kl_beta: 0.05
+  group_size: 2
   temperature: 0.8
   top_p: 0.9

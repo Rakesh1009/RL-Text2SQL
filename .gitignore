@@ -4,3 +4,7 @@
 
 _pycache_/
 text2sql/__pycache__/*
+
+hf_cache/
+
+data/

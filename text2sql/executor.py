@@ -1,8 +1,17 @@
 import sqlite3
 import time
 import os
+import yaml
 
-DB_ROOT = "/content/drive/MyDrive/RL_Text2SQL_storage/spider_db/database"
+def get_db_root():
+    try:
+        with open("configs/default.yaml", "r") as f:
+            config = yaml.safe_load(f)
+            return config.get("paths", {}).get("spider_db", "./data/spider_db")
+    except Exception:
+        return os.getenv("SPIDER_DB_ROOT", "./data/spider_db")
+
+DB_ROOT = get_db_root()
 
 
 def execute_sql(sql, db_id):
@@ -37,6 +46,8 @@ def execution_report(pred_sql, gold_sql, db_id):
         "pred_executable": pred["success"],
         "gold_executable": gold["success"],
         "correct_result": False,
+        "pred_result": pred["result"],
+        "gold_result": gold["result"],
         "pred_error": pred["error"],
         "execution_time": pred["time"]
     }
