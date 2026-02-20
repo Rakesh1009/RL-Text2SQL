@@ -1,7 +1,7 @@
 mode: train   # debug | train
 
 model:
-  name: Qwen/Qwen2-1.5B
+  name: Qwen/Qwen2.5-3B-Instruct
   load_in_4bit: true
   lora_r: 8
   lora_alpha: 16
@@ -12,12 +12,12 @@ model:
 
 training:
   lr: 0.00002
-  epochs: 1
-  max_new_tokens: 32
+  epochs: 20
+  max_new_tokens: 64
   subset_size: 5
 
 rl:
   algorithm: grpo     # reinforce | grpo
-  group_size: 2
+  group_size: 4
   temperature: 0.8
   top_p: 0.9

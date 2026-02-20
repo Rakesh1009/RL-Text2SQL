@@ -15,8 +15,8 @@ if __name__ == "__main__":
 
     print("Loading dataset...")
     train_data, val_data = load_spider_splits(
-        train_size=2,
-        val_size=1,
+        train_size=20,
+        val_size=5,
         seed=42
     )
 

@@ -128,7 +128,7 @@ def train(model, tokenizer, train_data, val_data, config):
         train_accuracy = total_reward / len(train_data)
         avg_loss = total_loss / len(train_data)
 
-        print(f"\nTrain Execution Accuracy: {train_accuracy}")
+        print(f"\nTrain Avg Reward: {train_accuracy}")
         print(f"Average Loss: {avg_loss}")
 
         val_accuracy = evaluate(
@@ -138,5 +138,5 @@ def train(model, tokenizer, train_data, val_data, config):
             max_new_tokens
         )
 
-        print(f"Validation Execution Accuracy: {val_accuracy}")
+        print(f"Validation Avg Reward: {val_accuracy}")
 

@@ -22,7 +22,8 @@ def reinforce_step(model, tokenizer, inputs,
             max_new_tokens=max_new_tokens,
             do_sample=True,
             temperature=temperature,
-            top_p=top_p
+            top_p=top_p,
+            pad_token_id=tokenizer.pad_token_id
         )
 
     gen_tokens = generated[:, input_len:]
@@ -92,7 +93,8 @@ def grpo_step(model, tokenizer, inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=True,
                 temperature=temperature,
-                top_p=top_p
+                top_p=top_p,
+                pad_token_id=tokenizer.pad_token_id
             )
 
         gen_tokens = generated[:, input_len:]
